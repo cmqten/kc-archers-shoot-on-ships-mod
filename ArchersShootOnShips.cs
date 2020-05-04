@@ -27,20 +27,15 @@ namespace ArchersShootOnShips
             harmony.PatchAll(Assembly.GetExecutingAssembly());
         }
         
-        // Returns false if archer can shoot, true otherwise.
-        private static bool CanArcherNotShoot(UnitSystem.Army army)
+        // Returns true if the army squad is moving, false otherwise. Takes into account being on a ship. In this case, 
+        // the army squad is not moving.
+        private static bool IsArmyMoving(UnitSystem.Army army)
         {
-            bool onShip = true;
-            if (!onShip)
-            {
-                return army.moving;
-            }
-            else
-            {
-                return false;
-            }
+            // army.locked currently being used only for Transport Ship. Locked if on ship, unlocked otherwise.
+            return !army.locked && army.moving;
         }
 
+        // ArcherGeneral::Update patch for replacing condition for shooting.
         [HarmonyPatch(typeof(ArcherGeneral))]
         [HarmonyPatch("Update")]
         public static class ShootOnShipsPatch
@@ -53,13 +48,14 @@ namespace ArchersShootOnShips
                     System.Object operand = instruction.operand;
 
                     // Looks for field access to UnitSystem.Army.moving and replaces it with a function call that 
-                    // evaluates the UnitSystem.Army already on the stack, then returns false if the unit can shoot, 
-                    // true otherwise.
+                    // evaluates the UnitSystem.Army already on the stack. This function returns whether an army squad 
+                    // is moving or not, but takes into account being on a ship. In this case, the army squad is not
+                    // moving.
                     if (opcode == OpCodes.Ldfld && operand != null && operand.ToString() == "System.Boolean moving")
                     {
-                        MethodInfo method_ReturnFalse = AccessTools.Method(typeof(ArchersShootOnShipsMod), 
-                            nameof(CanArcherNotShoot));
-                        CodeInstruction newInstruction = new CodeInstruction(OpCodes.Call, method_ReturnFalse);
+                        MethodInfo method_IsArmyMoving = AccessTools.Method(typeof(ArchersShootOnShipsMod),
+                            nameof(IsArmyMoving));
+                        CodeInstruction newInstruction = new CodeInstruction(OpCodes.Call, method_IsArmyMoving);
                         yield return newInstruction;
                     }
                     else 
